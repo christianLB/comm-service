@@ -1,0 +1,146 @@
+# Verdaccio configuration file
+# This is the configuration file for the Verdaccio private npm registry
+
+# Storage path for packages
+storage: /verdaccio/storage
+
+# Plugins directory
+plugins: /verdaccio/plugins
+
+# Web UI configuration
+web:
+  title: K2600X Private NPM Registry
+  logo: 
+  primary_color: "#4b5563"
+  gravatar: true
+  scope: "@k2600x"
+  sort_packages: asc
+
+# Authentication configuration
+auth:
+  htpasswd:
+    file: /verdaccio/conf/htpasswd
+    # Maximum amount of users allowed to register, defaults to "+inf".
+    max_users: 10
+    # Hash algorithm, possible options are: "bcrypt", "md5", "sha1", "crypt"
+    algorithm: bcrypt
+    # Rounds for bcrypt, will be ignored for other algorithms
+    rounds: 10
+
+# Uplinks - upstream registries
+uplinks:
+  npmjs:
+    url: https://registry.npmjs.org/
+    # Cache time for packages from npmjs
+    cache: true
+    # Maximum time to wait for npmjs (in seconds)
+    timeout: 60s
+    # Maximum number of failures before disabling the uplink
+    max_fails: 5
+    # Time to wait before re-enabling the uplink after max_fails
+    fail_timeout: 5m
+    # Agent string
+    agent_options:
+      keepAlive: true
+      maxSockets: 40
+
+# Packages configuration
+packages:
+  # Scoped packages for your organization
+  '@k2600x/*':
+    # Allow all authenticated users to read
+    access: $authenticated
+    # Only k2600x user can publish
+    publish: k2600x
+    # No proxy - these are private packages
+    proxy: []
+
+  # All other packages from npmjs
+  '**':
+    # Allow all users (including non-authenticated) to read
+    access: $all
+    # Only authenticated users can publish
+    publish: $authenticated
+    # Proxy to npmjs for packages not in our registry
+    proxy: npmjs
+
+# Server configuration
+server:
+  keepAliveTimeout: 60
+
+# Middleware configuration
+middlewares:
+  audit:
+    enabled: true
+
+# Logs configuration
+logs:
+  - type: stdout
+    format: pretty
+    level: info
+  - type: file
+    path: /verdaccio/storage/verdaccio.log
+    level: info
+    format: pretty
+  - type: rotating-file
+    path: /verdaccio/storage/verdaccio-rotate-%d.log
+    level: info
+    period: 1d
+    count: 3
+    format: json
+
+# Maximum body size for JSON documents (package metadata)
+max_body_size: 100mb
+
+# Listen configuration
+listen:
+  - http://0.0.0.0:4873
+
+# HTTPS configuration (disabled by default, enable if needed)
+# https:
+#   key: /verdaccio/conf/server.key
+#   cert: /verdaccio/conf/server.crt
+#   ca: /verdaccio/conf/server.ca
+
+# Proxy configuration
+# http_proxy: http://something.local/
+# https_proxy: https://something.local/
+# no_proxy: localhost,127.0.0.1
+
+# Notifications (optional)
+# notify:
+#   method: POST
+#   headers: [{'Content-Type': 'application/json'}]
+#   endpoint: https://your-webhook-url.com/
+#   content: '{"text": "Package published: *{{ name }}*", "username": "verdaccio"}'
+
+# Security
+security:
+  api:
+    # JWT token configuration
+    jwt:
+      sign:
+        expiresIn: 60d
+        notBefore: 1
+      verify:
+        # Reject tokens issued before this date
+        notBefore: 1
+  # Additional security options
+  web:
+    sign:
+      expiresIn: 7d
+
+# Experimental features
+experiments:
+  # Enable token authentication
+  token: false
+
+# User rate limiting
+userRateLimit:
+  windowMs: 50000
+  max: 1000
+
+# Package publish rate limiting  
+publishRateLimit:
+  windowMs: 10000
+  max: 10

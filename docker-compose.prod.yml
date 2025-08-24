@@ -1,0 +1,98 @@
+version: "3.9"
+
+services:
+  comm-service:
+    image: comm-service:v0.1-prod
+    container_name: comm-service
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - REDIS_URL=redis://comm-redis:6379
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMINS_TELEGRAM_IDS=${ADMINS_TELEGRAM_IDS}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-1h}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - MAGIC_LINK_TTL=${MAGIC_LINK_TTL:-300}
+      - SERVICE_URLS_TRADING=${SERVICE_URLS_TRADING}
+      - SERVICE_URLS_FINANCIAL=${SERVICE_URLS_FINANCIAL}
+      - SERVICE_URLS_AI=${SERVICE_URLS_AI}
+      - SERVICE_URLS_MEMORY=${SERVICE_URLS_MEMORY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      comm-redis:
+        condition: service_healthy
+    volumes:
+      # Persistent data volumes - NAS paths
+      - /volume1/docker/comm-service/logs:/app/logs
+      - /volume1/docker/comm-service/data/audit:/app/audit
+      - /volume1/docker/comm-service/config/templates:/app/templates:ro
+    networks:
+      - comm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  comm-redis:
+    image: redis:7-alpine
+    container_name: comm-redis
+    ports:
+      - "127.0.0.1:6379:6379"  # Only bind to localhost for security
+    volumes:
+      # Persistent Redis data on NAS
+      - /volume1/docker/comm-service/data/redis:/data
+      - /volume1/docker/comm-service/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    networks:
+      - comm-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+networks:
+  comm-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/24
+          gateway: 172.25.0.1

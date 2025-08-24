@@ -1,0 +1,12 @@
+generatorName: typescript-axios
+outputDir: ./sdk
+inputSpec: ./openapi.yaml
+additionalProperties:
+  npmName: "@k2600x/comm-service-sdk"
+  npmVersion: "0.1.0"
+  supportsES6: true
+  withSeparateModelsAndApi: true
+  apiPackage: "api"
+  modelPackage: "models"
+  withInterfaces: true
+  npmRepository: "http://192.168.1.11:4873"

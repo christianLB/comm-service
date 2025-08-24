@@ -1,0 +1,432 @@
+openapi: 3.1.0
+info:
+  title: Comm-Service API
+  version: 0.1.0
+  description: >
+    Servicio central de comunicación y orquestación de confirmaciones/comandos
+    entre admin y microservicios (trading, financial, ai, memory).
+servers:
+  - url: http://localhost:8080
+    description: Local/dev
+  - url: https://comm.k2600x.internal
+    description: Prod
+
+tags:
+  - name: Messages
+  - name: Commands
+  - name: Verification
+  - name: Events
+  - name: Health
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health probe
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /v1/messages/send:
+    post:
+      tags: [Messages]
+      summary: Enviar notificación (Telegram/Email/Auto) con fallback y TTL
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MessageSendRequest' }
+            examples:
+              telegramSimple:
+                value:
+                  channel: telegram
+                  template_key: alerts.generic
+                  locale: es-AR
+                  data: { title: "Alerta", body: "Se detectó slippage alto" }
+                  to: { telegram_chat_id: 123456789 }
+                  routing: { fallback: ["email"], ttl_seconds: 300 }
+      responses:
+        "202":
+          description: Mensaje encolado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnqueued' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/commands/dispatch:
+    post:
+      tags: [Commands]
+      summary: Despachar comando a un servicio (con opción de confirmación Sí/No)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommandDispatchRequest' }
+            examples:
+              pauseStrategy:
+                value:
+                  service: trading-service
+                  action: strategy.pause
+                  args: { strategy_id: "btc-arb-01", reason: "manual_maintenance" }
+                  require_confirmation: true
+                  channel: telegram
+                  routing: { fallback: ["email"], ttl_seconds: 300 }
+                  audit: { requested_by: "admin@k2600x", trace_id: "trace-123" }
+      responses:
+        "202":
+          description: Comando aceptado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommandAccepted' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/verification/start:
+    post:
+      tags: [Verification]
+      summary: Iniciar verificación por email o telegram (OTP o magic link)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerificationStartRequest' }
+            examples:
+              emailOtp:
+                value:
+                  method: email
+                  purpose: login
+                  to: { email: "c@example.com" }
+                  mode: otp
+                  ttl_seconds: 600
+              telegramLink:
+                value:
+                  method: telegram
+                  purpose: account_link
+                  to: { telegram_chat_id: 123456789 }
+                  mode: magic_link
+                  ttl_seconds: 600
+      responses:
+        "202":
+          description: Verificación iniciada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationStarted' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/verification/confirm:
+    post:
+      tags: [Verification]
+      summary: Confirmar OTP o token de magic link
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerificationConfirmRequest' }
+            examples:
+              otpConfirm:
+                value:
+                  verification_id: "ver_abc"
+                  token: "843921"
+      responses:
+        "200":
+          description: Verificado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VerificationResult' }
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "410":
+          description: Expirado
+
+  /v1/events:
+    post:
+      tags: [Events]
+      summary: Ingesta de eventos desde servicios (status de comandos, outputs)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventIn' }
+            examples:
+              commandCompleted:
+                value:
+                  command_id: "cmd_9x"
+                  service: "trading-service"
+                  status: "completed"
+                  output: { paused: true, ts: "2025-08-22T14:31:00Z" }
+                  metrics: { latency_ms: 320 }
+      responses:
+        "204":
+          description: Aceptado
+        "400": { $ref: '#/components/responses/BadRequest' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: false
+      schema:
+        type: string
+        maxLength: 200
+      description: Clave para deduplicar solicitudes
+
+  responses:
+    BadRequest:
+      description: Error de validación o payload inválido
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: No autorizado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        service:
+          type: string
+        version:
+          type: string
+        dependencies:
+          type: object
+          properties:
+            redis:
+              type: string
+              enum: [connected, disconnected]
+
+    Channel:
+      type: string
+      enum: [telegram, email, auto]
+
+    Routing:
+      type: object
+      properties:
+        fallback:
+          type: array
+          items: { $ref: '#/components/schemas/Channel' }
+          description: Orden de fallback si falla el canal principal
+        ttl_seconds:
+          type: integer
+          minimum: 30
+          maximum: 86400
+      additionalProperties: false
+
+    To:
+      type: object
+      properties:
+        telegram_chat_id:
+          type: integer
+          minimum: 1
+        email:
+          type: string
+          format: email
+      additionalProperties: false
+
+    MessageSendRequest:
+      type: object
+      required: [channel, template_key, data, to]
+      properties:
+        channel: { $ref: '#/components/schemas/Channel' }
+        template_key:
+          type: string
+          example: alerts.generic
+        locale:
+          type: string
+          example: es-AR
+        data:
+          type: object
+          description: Variables de la plantilla (clave/valor)
+          additionalProperties: true
+        to: { $ref: '#/components/schemas/To' }
+        require_confirmation:
+          type: boolean
+          default: false
+        routing: { $ref: '#/components/schemas/Routing' }
+        metadata:
+          type: object
+          additionalProperties: true
+
+    MessageEnqueued:
+      type: object
+      properties:
+        message_id:
+          type: string
+          example: msg_abc
+        status:
+          type: string
+          enum: [queued]
+        channel_selected:
+          $ref: '#/components/schemas/Channel'
+
+    CommandDispatchRequest:
+      type: object
+      required: [service, action]
+      properties:
+        service:
+          type: string
+          example: trading-service
+        action:
+          type: string
+          example: strategy.pause
+        args:
+          type: object
+          additionalProperties: true
+        require_confirmation:
+          type: boolean
+          default: false
+        channel:
+          $ref: '#/components/schemas/Channel'
+        routing:
+          $ref: '#/components/schemas/Routing'
+        audit:
+          type: object
+          properties:
+            requested_by: { type: string }
+            trace_id: { type: string }
+          additionalProperties: false
+
+    CommandAccepted:
+      type: object
+      properties:
+        command_id:
+          type: string
+          example: cmd_9x
+        status:
+          type: string
+          enum: [pending_confirmation, queued, sent]
+
+    VerificationMethod:
+      type: string
+      enum: [email, telegram]
+
+    VerificationMode:
+      type: string
+      enum: [otp, magic_link]
+
+    VerificationStartRequest:
+      type: object
+      required: [method, purpose, to, mode]
+      properties:
+        method:
+          $ref: '#/components/schemas/VerificationMethod'
+        purpose:
+          type: string
+          example: login
+        to:
+          $ref: '#/components/schemas/To'
+        mode:
+          $ref: '#/components/schemas/VerificationMode'
+        ttl_seconds:
+          type: integer
+          minimum: 60
+          maximum: 3600
+          default: 600
+
+    VerificationStarted:
+      type: object
+      properties:
+        verification_id:
+          type: string
+          example: ver_abc
+        method:
+          $ref: '#/components/schemas/VerificationMethod'
+        mode:
+          $ref: '#/components/schemas/VerificationMode'
+        expires_at:
+          type: string
+          format: date-time
+
+    VerificationConfirmRequest:
+      type: object
+      required: [verification_id, token]
+      properties:
+        verification_id:
+          type: string
+        token:
+          type: string
+
+    VerificationResult:
+      type: object
+      properties:
+        verified:
+          type: boolean
+        verification_id:
+          type: string
+        purpose:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    EventIn:
+      type: object
+      required: [command_id, service, status]
+      properties:
+        command_id:
+          type: string
+        service:
+          type: string
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        output:
+          type: object
+          additionalProperties: true
+        error:
+          type: string
+        metrics:
+          type: object
+          properties:
+            latency_ms:
+              type: integer
+          additionalProperties: true
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true

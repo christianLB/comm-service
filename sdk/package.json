@@ -1,0 +1,36 @@
+{
+  "name": "@k2600x/comm-service-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Comm Service API",
+  "author": "Christian",
+  "repository": {
+    "type": "git",
+    "url": "http://192.168.1.11/comm-service-sdk"
+  },
+  "keywords": [
+    "axios",
+    "typescript",
+    "openapi-client",
+    "openapi-generator",
+    "@k2600x/comm-service-sdk"
+  ],
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "typings": "./dist/index.d.ts",
+  "module": "./dist/esm/index.js",
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc && tsc -p tsconfig.esm.json",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "axios": "^1.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "12.11.5 - 12.20.42",
+    "typescript": "^4.0 || ^5.0"
+  },
+  "publishConfig": {
+    "registry": "http://192.168.1.11:4873"
+  }
+}

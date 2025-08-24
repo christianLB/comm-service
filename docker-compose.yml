@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  comm-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: comm-service
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=development
+      - PORT=8080
+      - REDIS_URL=redis://redis:6379
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMINS_TELEGRAM_IDS=${ADMINS_TELEGRAM_IDS:-123456789}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-key-change-in-production}
+      - JWT_EXPIRATION=${JWT_EXPIRATION:-1h}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@comm-service.local}
+      - MAGIC_LINK_TTL=${MAGIC_LINK_TTL:-300}
+      - SERVICE_URLS_TRADING=${SERVICE_URLS_TRADING:-http://trading-service:3000}
+      - SERVICE_URLS_FINANCIAL=${SERVICE_URLS_FINANCIAL:-http://financial-service:3000}
+      - SERVICE_URLS_AI=${SERVICE_URLS_AI:-http://ai-service:3000}
+      - SERVICE_URLS_MEMORY=${SERVICE_URLS_MEMORY:-http://memory-service:3000}
+    depends_on:
+      - redis
+    volumes:
+      - ./src:/app/src:ro
+      - ./logs:/app/logs
+    networks:
+      - comm-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: comm-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes --appendfilename "comm-service.aof"
+    networks:
+      - comm-network
+    restart: unless-stopped
+
+networks:
+  comm-network:
+    driver: bridge
