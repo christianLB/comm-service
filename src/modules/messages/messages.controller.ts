@@ -7,7 +7,7 @@ import { ErrorDto } from '../../common/dto/common.dto';
 
 @ApiTags('Messages')
 @Controller('messages')
-// @UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
 export class MessagesController {
   constructor(private readonly messagesService: MessagesService) {}

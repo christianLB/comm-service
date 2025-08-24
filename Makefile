@@ -131,6 +131,38 @@ token-nas: ## Quick command to get GoCardless token from NAS production
 token-help: ## Show token generation help
 	@node scripts/generate-token.js --help
 
+# DEPLOYMENT TO NAS
+deploy: ## Deploy to NAS (192.168.1.11) - ONE COMMAND!
+	@echo '${CYAN}🚀 DEPLOYING TO NAS...${NC}'
+	@npm run build >/dev/null 2>&1
+	@docker build -t comm-service:latest . >/dev/null 2>&1
+	@echo '${YELLOW}📦 Packaging...${NC}'
+	@docker save comm-service:latest | gzip > /tmp/comm.tar.gz
+	@echo '${YELLOW}📤 Uploading to NAS...${NC}'
+	@scp /tmp/comm.tar.gz k2600x@192.168.1.11:/volume1/docker/comm-service/comm.tar.gz
+	@echo '${YELLOW}🔧 Deploying on NAS...${NC}'
+	@ssh k2600x@192.168.1.11 "\
+		cd /volume1/docker/comm-service && \
+		sudo /usr/local/bin/docker load < comm.tar.gz && \
+		sudo /usr/local/bin/docker stop comm-service comm-redis 2>/dev/null || true && \
+		sudo /usr/local/bin/docker rm comm-service comm-redis 2>/dev/null || true && \
+		sudo /usr/local/bin/docker run -d --name comm-redis --restart unless-stopped \
+			-v /volume1/docker/comm-service/data/redis:/data \
+			redis:7-alpine redis-server --appendonly yes && \
+		sleep 2 && \
+		sudo /usr/local/bin/docker run -d --name comm-service --restart unless-stopped \
+			-p 8080:8080 \
+			-v /volume1/docker/comm-service/logs:/app/logs \
+			--env-file /volume1/docker/comm-service/.env \
+			-e REDIS_URL=redis://comm-redis:6379 \
+			--link comm-redis:redis \
+			comm-service:latest && \
+		rm comm.tar.gz && \
+		echo '✅ DEPLOYED!' && \
+		sudo /usr/local/bin/docker ps | grep comm"
+	@rm /tmp/comm.tar.gz
+	@echo '${GREEN}🎉 Service running at http://192.168.1.11:8080${NC}'
+
 # Development shortcuts
 up: docker-up ## Alias for docker-up
 down: docker-down ## Alias for docker-down

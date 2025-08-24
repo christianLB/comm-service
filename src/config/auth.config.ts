@@ -5,6 +5,6 @@ export default registerAs('auth', () => ({
     secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
     expiresIn: process.env.JWT_EXPIRATION || '1h',
     issuer: 'comm-service',
-    audience: ['comm-service', 'trading-service', 'financial-service', 'ai-service', 'memory-service', 'gocardless-service', 'test-service'],
+    audience: ['comm-service', 'trading-service', 'financial-service', 'ai-service', 'memory-service', 'gocardless-service', 'test-service', 'bank-sync-service'],
   },
 }));
